@@ -140,6 +140,10 @@ class Monster extends GameObject {
 
 class Star {
   constructor() {
+    this.x = 0;
+    this.y = 0;
+    this.z = 0;
+    this.pz = 0;
     this.reset();
   }
 
@@ -175,23 +179,86 @@ class Star {
   }
 }
 
-const Messages = {
-  MONSTER_OUT_OF_BOUNDS: 'MONSTER_OUT_OF_BOUNDS',
-  HERO_SPEED_LEFT: 'HERO_MOVING_LEFT',
-  HERO_SPEED_RIGHT: 'HERO_MOVING_RIGHT',
-  HERO_SPEED_ZERO: 'HERO_SPEED_ZERO',
-  HERO_FIRE: 'HERO_FIRE',
-  GAME_END_LOSS: 'GAME_END_LOSS',
-  GAME_END_WIN: 'GAME_END_WIN',
-  COLLISION_MONSTER_LASER: 'COLLISION_MONSTER_LASER',
-  COLLISION_MONSTER_HERO: 'COLLISION_MONSTER_HERO',
-  KEY_EVENT_UP: 'KEY_EVENT_UP',
-  KEY_EVENT_DOWN: 'KEY_EVENT_DOWN',
-  KEY_EVENT_LEFT: 'KEY_EVENT_LEFT',
-  KEY_EVENT_RIGHT: 'KEY_EVENT_RIGHT',
-  GAME_START: 'GAME_START',
-  GAME_PAUSE: 'GAME_PAUSE',
-};
+class AudioManager {
+  constructor() {
+    this.sounds = {
+      theme: new Audio('assets/mp3/theme.mp3'),
+      laser: new Audio('assets/mp3/laser-shoot.mp3'),
+      explosion: new Audio('assets/mp3/explosion.mp3'),
+      gameOver: new Audio('assets/mp3/game_over.mp3'),
+      stageCleared: new Audio('assets/mp3/clear.mp3'),
+      titleScreen: new Audio('assets/mp3/screen.mp3'),
+      start: new Audio('assets/mp3/start.mp3'),
+    };
+
+    // Set initial volumes
+    this.sounds.theme.volume = 0.1;
+    this.sounds.titleScreen.volume = 0.4;
+    this.sounds.start.volume = 0.3;
+    this.sounds.stageCleared.volume = 0.4;
+    this.sounds.gameOver.volume = 0.4;
+    this.sounds.explosion.volume = 0.2;
+    this.sounds.laser.volume = 0.3;
+
+    // Set theme to loop
+    this.sounds.theme.loop = true;
+    this.sounds.titleScreen.loop = true;
+
+    // Preload all sounds
+    Object.values(this.sounds).forEach((sound) => {
+      sound.load();
+    });
+  }
+
+  async playPromise(soundName) {
+    if (this.sounds[soundName]) {
+      try {
+        this.sounds[soundName].currentTime = 0;
+        await this.sounds[soundName].play();
+      } catch (error) {
+        console.log('Audio play failed:', error);
+        // Try to play again after a short delay
+        setTimeout(() => {
+          this.sounds[soundName]
+            .play()
+            .catch((e) => console.log('Retry play failed:', e));
+        }, 100);
+      }
+    }
+  }
+
+  play(soundName) {
+    if (this.sounds[soundName]) {
+      this.sounds[soundName].currentTime = 0;
+      this.sounds[soundName]
+        .play()
+        .catch((e) => console.log('Audio play failed:', e));
+    }
+  }
+
+  pause(soundName) {
+    if (this.sounds[soundName]) {
+      this.sounds[soundName].pause();
+    }
+  }
+
+  stop(soundName) {
+    if (this.sounds[soundName]) {
+      this.sounds[soundName].pause();
+      this.sounds[soundName].currentTime = 0;
+    }
+  }
+
+  stopAll() {
+    Object.keys(this.sounds).forEach((soundName) => {
+      this.stop(soundName);
+    });
+  }
+
+  isPlaying(soundName) {
+    return this.sounds[soundName].currentTime > 0;
+  }
+}
 
 class Game {
   constructor() {
@@ -352,6 +419,24 @@ class Game {
   }
 }
 
+const Messages = {
+  MONSTER_OUT_OF_BOUNDS: 'MONSTER_OUT_OF_BOUNDS',
+  HERO_SPEED_LEFT: 'HERO_MOVING_LEFT',
+  HERO_SPEED_RIGHT: 'HERO_MOVING_RIGHT',
+  HERO_SPEED_ZERO: 'HERO_SPEED_ZERO',
+  HERO_FIRE: 'HERO_FIRE',
+  GAME_END_LOSS: 'GAME_END_LOSS',
+  GAME_END_WIN: 'GAME_END_WIN',
+  COLLISION_MONSTER_LASER: 'COLLISION_MONSTER_LASER',
+  COLLISION_MONSTER_HERO: 'COLLISION_MONSTER_HERO',
+  KEY_EVENT_UP: 'KEY_EVENT_UP',
+  KEY_EVENT_DOWN: 'KEY_EVENT_DOWN',
+  KEY_EVENT_LEFT: 'KEY_EVENT_LEFT',
+  KEY_EVENT_RIGHT: 'KEY_EVENT_RIGHT',
+  GAME_START: 'GAME_START',
+  GAME_PAUSE: 'GAME_PAUSE',
+};
+
 const eventEmitter = new EventEmitter();
 const hero = new Hero(0, 0);
 const WIDTH = 1024;
@@ -370,101 +455,19 @@ let lifeImg;
 let monsterImg;
 let audio;
 let theme;
-const stars = [];
-const numStars = 500;
+let stars = [];
+let numStars = 500;
+let starfieldAnimationId = null;
 
 let coolDown = 0;
 let gamePaused = false;
 
 const game = new Game();
-
-class AudioManager {
-  constructor() {
-    this.sounds = {
-      theme: new Audio('assets/mp3/theme.mp3'),
-      laser: new Audio('assets/mp3/laser-shoot.mp3'),
-      explosion: new Audio('assets/mp3/explosion.mp3'),
-      gameOver: new Audio('assets/mp3/game_over.mp3'),
-      stageCleared: new Audio('assets/mp3/clear.mp3'),
-      titleScreen: new Audio('assets/mp3/screen.mp3'),
-      start: new Audio('assets/mp3/start.mp3'),
-    };
-
-    // Set initial volumes
-    this.sounds.theme.volume = 0.1;
-    this.sounds.titleScreen.volume = 0.4;
-    this.sounds.start.volume = 0.3;
-    this.sounds.stageCleared.volume = 0.4;
-    this.sounds.gameOver.volume = 0.4;
-    this.sounds.explosion.volume = 0.2;
-    this.sounds.laser.volume = 0.3;
-
-    this.sounds.theme.p;
-
-    // Set theme to loop
-    this.sounds.theme.loop = true;
-    this.sounds.titleScreen.loop = true;
-
-    // Preload all sounds
-    Object.values(this.sounds).forEach((sound) => {
-      sound.load();
-    });
-  }
-
-  async playPromise(soundName) {
-    if (this.sounds[soundName]) {
-      try {
-        this.sounds[soundName].currentTime = 0;
-        await this.sounds[soundName].play();
-      } catch (error) {
-        console.log('Audio play failed:', error);
-        // Try to play again after a short delay
-        setTimeout(() => {
-          this.sounds[soundName]
-            .play()
-            .catch((e) => console.log('Retry play failed:', e));
-        }, 100);
-      }
-    }
-  }
-
-  play(soundName) {
-    if (this.sounds[soundName]) {
-      this.sounds[soundName].currentTime = 0;
-      this.sounds[soundName]
-        .play()
-        .catch((e) => console.log('Audio play failed:', e));
-    }
-  }
-
-  pause(soundName) {
-    if (this.sounds[soundName]) {
-      this.sounds[soundName].pause();
-    }
-  }
-
-  stop(soundName) {
-    if (this.sounds[soundName]) {
-      this.sounds[soundName].pause();
-      this.sounds[soundName].currentTime = 0;
-    }
-  }
-
-  resume(soundName) {
-    if (this.sounds[soundName]) {
-      this.sounds[soundName].play();
-    }
-  }
-
-  stopAll() {
-    Object.keys(this.sounds).forEach((soundName) => {
-      this.stop(soundName);
-    });
-  }
-}
-
-// Initialize audio manager
 const audioManager = new AudioManager();
+
+// Add at the top with other variables
+let titleOpacity = 1;
+let opacityStep = -0.5; // Controls breathing speed
 
 function loadTexture(path) {
   return new Promise((resolve) => {
@@ -580,8 +583,31 @@ function displayMessage(message, color = 'red', opacity = 1) {
   ctx.fillStyle = color;
   ctx.fontWeight = 'bold';
   ctx.textAlign = 'center';
-  ctx.globalAlpha = opacity;
+  ctx.fontFamily = 'Arial, sans-serif';
+  ctx.cursor = 's';
+
+  // Update breathing effect
+  titleOpacity += opacityStep;
+  if (titleOpacity <= 0.2) {
+    opacityStep = 0.01;
+  } else if (titleOpacity >= 1) {
+    opacityStep = -0.01;
+  }
+
+  const shadowIntensity = titleOpacity * 10;
+  ctx.shadowColor = 'Aquamarine';
+  ctx.shadowBlur = shadowIntensity;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  // Reset shadow and opacity
+
+  ctx.globalAlpha = titleOpacity;
   ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
   ctx.globalAlpha = 1;
 }
 
@@ -654,6 +680,7 @@ function checkGameState(gameLoopId) {
   lasers.forEach((l) => {
     monsters.forEach((m) => {
       if (intersectRect(l.rectFromGameObject(), m.rectFromGameObject())) {
+        // @ts-ignore
         eventEmitter.emit(Messages.COLLISION_MONSTER_LASER, {
           first: l,
           second: m,
@@ -665,6 +692,7 @@ function checkGameState(gameLoopId) {
   // hero hit monster
   monsters.forEach((m) => {
     if (intersectRect(m.rectFromGameObject(), hero.rectFromGameObject())) {
+      // @ts-ignore
       eventEmitter.emit(Messages.COLLISION_MONSTER_HERO, {
         monster: m,
         id: gameLoopId,
@@ -684,8 +712,6 @@ function runGame() {
 
   createMonsters(monsterImg);
   createHero(heroImg);
-  // addStars(canvas.width, canvas.height, 100);
-  // animateStars(canvas.width, 1);
 
   let gameLoopId = setInterval(() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -710,8 +736,6 @@ function runGame() {
   }, 100);
 }
 
-let starfieldAnimationId = null;
-
 // Separate animation function for starfield
 function animateStarfield() {
   if (game.start) {
@@ -733,7 +757,7 @@ function animateStarfield() {
   });
 
   // Draw the title message
-  displayMessage('Press [Enter] to start the game Starship Commander', 'blue');
+  displayMessage('Press [Enter] to start', 'blue', 1);
 
   starfieldAnimationId = requestAnimationFrame(animateStarfield);
 }
@@ -741,6 +765,7 @@ function animateStarfield() {
 window.onload = async () => {
   canvas = document.getElementById('myCanvas');
   if (!canvas) return;
+  // @ts-ignore
   ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -765,7 +790,7 @@ window.onload = async () => {
   // Start title screen animation
   animateStarfield();
   canvas.addEventListener('click', () => {
-    if (!game.start) {
+    if (!game.start && !audioManager.isPlaying('titleScreen')) {
       audioManager.play('titleScreen');
     }
   });
