@@ -311,6 +311,8 @@ class Game {
       }
     });
     eventEmitter.on(Messages.GAME_START, async () => {
+      audioManager.stopAll();
+
       if (!game.start) {
         audioManager.stop('titleScreen');
         audioManager.play('start');
