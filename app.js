@@ -325,7 +325,7 @@ class Game {
       game.end = true;
       game.start = false;
       displayMessage(
-        'Victory!!! Pew Pew... - Press [Enter] to start a new game Starship Commander',
+        'Victory!!! \n Press [Enter] to start a new game',
         'green'
       );
 
@@ -412,9 +412,41 @@ class Game {
           audioManager.pause('theme');
           displayMessage('PAUSED - Press P to resume', 'yellow');
         } else {
-          audioManager.resume('theme');
+          audioManager.play('theme');
         }
       }
+    });
+    eventEmitter.on(Messages.GAME_EXIT, (_, gameLoopId) => {
+      // Stop all game sounds
+      audioManager.stopAll();
+
+      // Reset game state
+      this.points = 0;
+      this.life = 3;
+      this.end = true;
+      this.start = false;
+      this.paused = false;
+
+      // Clear game objects
+      gameObjects = [];
+
+      // Clear the canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Stop any running game loop
+      if (gameLoopId) {
+        clearInterval(gameLoopId);
+      }
+
+      // Start title screen animation
+      if (starfieldAnimationId) {
+        cancelAnimationFrame(starfieldAnimationId);
+      }
+
+      animateStarfield();
+
+      // Play title screen music
+      audioManager.play('titleScreen');
     });
   }
 }
@@ -435,6 +467,7 @@ const Messages = {
   KEY_EVENT_RIGHT: 'KEY_EVENT_RIGHT',
   GAME_START: 'GAME_START',
   GAME_PAUSE: 'GAME_PAUSE',
+  GAME_EXIT: 'GAME_EXIT',
 };
 
 const eventEmitter = new EventEmitter();
@@ -534,7 +567,6 @@ window.addEventListener('keypress', (e) => {
 
 // TODO make message driven
 window.addEventListener('keydown', (evt) => {
-  eventEmitter.emit(Messages.HERO_SPEED_ZERO);
   if (evt.key === 'ArrowUp') {
     eventEmitter.emit(Messages.KEY_EVENT_UP);
   } else if (evt.key === 'ArrowDown') {
@@ -550,6 +582,11 @@ window.addEventListener('keydown', (evt) => {
     eventEmitter.emit(Messages.GAME_START);
   } else if (evt.key === 'p') {
     eventEmitter.emit(Messages.GAME_PAUSE);
+  } else if (evt.key === 'Escape') {
+    if (game.start || game.end) {
+      // Only allow exit during gameplay
+      eventEmitter.emit(Messages.GAME_EXIT);
+    }
   }
 });
 
@@ -564,17 +601,21 @@ function cooling() {
 }
 
 function displayGameScore(message) {
-  ctx.font = '30px Arial';
-  ctx.fillStyle = 'red';
-  ctx.textAlign = 'right';
-  ctx.fillText(message, canvas.width - 90, canvas.height - 30);
+  if (game.start) {
+    ctx.font = '30px Arial';
+    ctx.fillStyle = 'red';
+    ctx.textAlign = 'right';
+    ctx.fillText(message, canvas.width - 90, canvas.height - 30);
+  }
 }
 
 function displayLife() {
-  // should show tree ships.. 94 * 3
-  const START_X = canvas.width - 150 - 30;
-  for (let i = 0; i < game.life; i++) {
-    ctx.drawImage(lifeImg, START_X + (i + 1) * 35, canvas.height - 90);
+  if (game.start) {
+    // should show tree ships.. 94 * 3
+    const START_X = canvas.width - 150 - 30;
+    for (let i = 0; i < game.life; i++) {
+      ctx.drawImage(lifeImg, START_X + (i + 1) * 35, canvas.height - 90);
+    }
   }
 }
 
@@ -645,14 +686,12 @@ function checkGameState(gameLoopId) {
   const monsters = gameObjects.filter((go) => go.type === 'Monster');
   if (hero.dead) {
     eventEmitter.emit(Messages.GAME_END_LOSS, gameLoopId);
-  } else if (monsters.length === 0) {
+  } else if (monsters.length === 0 && !game.end) {
     // Stop all sounds and play victory music
     audioManager.stopAll();
     audioManager.play('stageCleared');
 
     // Set game state before emitting win event
-    game.end = true;
-    game.start = false;
     eventEmitter.emit(Messages.GAME_END_WIN, gameLoopId);
   }
 
@@ -725,7 +764,7 @@ function runGame() {
     displayGameScore('Score: ' + game.points);
     displayLife();
 
-    if (gamePaused) {
+    if (gamePaused && gameObjects.length > 0) {
       // Draw a semi-transparent overlay
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -790,7 +829,12 @@ window.onload = async () => {
   // Start title screen animation
   animateStarfield();
   canvas.addEventListener('click', () => {
-    if (!game.start && !audioManager.isPlaying('titleScreen')) {
+    if (
+      !game.start &&
+      !audioManager.isPlaying('titleScreen') &&
+      !audioManager.isPlaying('stageCleared') &&
+      !audioManager.isPlaying('gameOver')
+    ) {
       audioManager.play('titleScreen');
     }
   });
